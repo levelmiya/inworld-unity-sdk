@@ -179,6 +179,7 @@ namespace Inworld
         }
         void Update()
         {
+            m_Client.UpdateWrapper();
             if (m_StartToQuit && State == ControllerStates.Idle)
             {
                 Application.Quit();
