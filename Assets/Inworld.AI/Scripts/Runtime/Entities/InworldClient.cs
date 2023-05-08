@@ -153,7 +153,7 @@ VSAttribution.VSAttribution.SendAttributionEvent("Login Runtime", InworldAI.k_Co
         }
         
         //Callback should be invoked through the wrapper in the NDK
-        public void LoadSceneCallback(IntPtr serializedAgentInfoArray, int serializedAgentInfoArraySize)
+        public async void LoadSceneCallback(IntPtr serializedAgentInfoArray, int serializedAgentInfoArraySize)
         {
             byte[] serializedData = new byte[serializedAgentInfoArraySize];
             Marshal.Copy(serializedAgentInfoArray, serializedData, 0, serializedAgentInfoArraySize);
