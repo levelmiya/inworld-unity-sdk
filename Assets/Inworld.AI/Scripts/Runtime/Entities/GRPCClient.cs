@@ -149,10 +149,6 @@ public class GRPCClient : IInworldClient<GrpcPacket>
         {
             m_Client.m_CurrentConnection.incomingInteractionsQueue.Enqueue(new TextEvent(packet));
         }
-        else if (packet.Gesture != null)
-        {
-            m_Client.m_CurrentConnection.incomingInteractionsQueue.Enqueue(new GestureEvent(packet));
-        }
         else if (packet.Control != null)
         {
             m_Client.m_CurrentConnection.incomingInteractionsQueue.Enqueue(new Inworld.Packets.ControlEvent(packet));
