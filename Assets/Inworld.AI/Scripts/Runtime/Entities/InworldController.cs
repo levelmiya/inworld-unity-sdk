@@ -117,13 +117,14 @@ namespace Inworld
         public InworldCharacter CurrentCharacter
         {
             get => m_CurrentCharacter;
-            private set
+            set
             {
                 if (m_CurrentCharacter == value)
                     return;
                 m_LastCharacter = m_CurrentCharacter;
                 m_CurrentCharacter = value;
-                StartCoroutine(SwitchAudioCapture());
+                if (enabled)
+                    StartCoroutine(SwitchAudioCapture());
                 OnCharacterChanged?.Invoke(m_LastCharacter, m_CurrentCharacter);
             }
         }
@@ -341,7 +342,7 @@ namespace Inworld
             m_Client.StartSession();
 #pragma warning restore 4014
             State = ControllerStates.Connected;
-            InworldAI.Log("InworldController Connected");
+            InworldAI.Log($"InworldController Connected {m_Client.SessionID}");
             StartCoroutine(InteractionCoroutine());
         }
         IEnumerator SwitchAudioCapture()

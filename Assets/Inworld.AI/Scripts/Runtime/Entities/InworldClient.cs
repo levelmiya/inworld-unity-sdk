@@ -14,15 +14,11 @@ using Inworld.Util;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
-using System.Text;
 using System.Threading.Tasks;
-using UnityEditor;
-using UnityEngine;
 using AudioChunk = Inworld.Packets.AudioChunk;
 using ControlEvent = Inworld.Grpc.ControlEvent;
 using CustomEvent = Inworld.Packets.CustomEvent;
 using EmotionEvent = Inworld.Packets.EmotionEvent;
-using GestureEvent = Inworld.Packets.GestureEvent;
 using GrpcPacket = Inworld.Grpc.InworldPacket;
 using InworldPacket = Inworld.Packets.InworldPacket;
 using Routing = Inworld.Packets.Routing;
@@ -184,11 +180,7 @@ namespace Inworld
             else if (packet.Text != null)
             {
                 m_CurrentConnection.incomingInteractionsQueue.Enqueue(new TextEvent(packet));
-            }
-            else if (packet.Gesture != null)
-            {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new GestureEvent(packet));
-            }
+            }            
             else if (packet.Control != null)
             {
                 m_CurrentConnection.incomingInteractionsQueue.Enqueue(new Packets.ControlEvent(packet));

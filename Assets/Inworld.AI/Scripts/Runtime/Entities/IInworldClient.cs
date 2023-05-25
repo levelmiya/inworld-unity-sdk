@@ -6,7 +6,6 @@ using AnimationChunk = Inworld.Packets.AnimationChunk;
 using ControlEvent = Inworld.Grpc.ControlEvent;
 using CustomEvent = Inworld.Packets.CustomEvent;
 using EmotionEvent = Inworld.Packets.EmotionEvent;
-using GestureEvent = Inworld.Packets.GestureEvent;
 using GrpcPacket = Inworld.Grpc.InworldPacket;
 using InworldPacket = Inworld.Packets.InworldPacket;
 using Routing = Inworld.Packets.Routing;
