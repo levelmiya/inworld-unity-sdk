@@ -1,4 +1,4 @@
-/*************************************************************************************************
+﻿/*************************************************************************************************
 * Copyright 2022 Theai, Inc. (DBA Inworld)
 *
 * Use of this source code is governed by the Inworld.ai Software Development Kit License Agreement
@@ -34,7 +34,7 @@ namespace Inworld
     /// <summary>
     ///     This class used to save the communication data in runtime.
     /// </summary>
-    class Connection
+    public class Connection
     {
         // Animation Chunks.
         internal readonly ConcurrentQueue<AnimationChunk> incomingAnimationQueue = new ConcurrentQueue<AnimationChunk>();
@@ -48,165 +48,78 @@ namespace Inworld
     /// <summary>
     ///     This is the logic class for Server communication.
     /// </summary>
-    class InworldClient
+    public class InworldClient
     {
+        public Connection m_CurrentConnection;
+        public event Action<RuntimeStatus, string> RuntimeEvent;
+        internal IInworldClient core;
         internal InworldClient()
         {
-            m_Channel = new Channel(InworldAI.Game.RuntimeServer, new SslCredentials());
-            m_WorldEngineClient = new WorldEngine.WorldEngineClient(m_Channel);
+            core = new GRPCClient();
+            core.Initialize(this);            
         }
-
-        #region Private Variables
-        readonly WorldEngine.WorldEngineClient m_WorldEngineClient;
-        readonly Channel m_Channel;
-        AsyncDuplexStreamingCall<GrpcPacket, GrpcPacket> m_StreamingCall;
-        Connection m_CurrentConnection;
-        InworldAuth m_InworldAuth;
-        string m_SessionKey = "";
-        Metadata m_Header;
-        internal event Action<RuntimeStatus, string> RuntimeEvent;
-        #endregion
 
         #region Properties
         internal ConcurrentQueue<Exception> Errors { get; } = new ConcurrentQueue<Exception>();
-        internal bool SessionStarted { get; private set; }
-        internal bool HasInit => !m_InworldAuth.IsExpired;
-        internal string SessionID => m_InworldAuth?.SessionID ?? "";
-        internal string LastState { get; set; }
-        bool IsSessionInitialized => m_SessionKey.Length != 0;
-        Timestamp Now => Timestamp.FromDateTime(DateTime.UtcNow);
+        internal bool SessionStarted { get; set; }
+        internal bool HasInit => core.IsAuthenticated;
+        internal string SessionID => core.SessionID;
+        internal string LastState { get => core.LastState; set => core.LastState = value; }
+        bool IsSessionInitialized => core.IsSessionInitialized;
+        public Timestamp Now => Timestamp.FromDateTime(DateTime.UtcNow);
         #endregion
 
+        public void GetAppAuth(string sessionToken)
+        {
+            core.Authenticate(sessionToken);
+        }
+
         #region Call backs
-        void OnAuthCompleted()
+        public void OnAuthCompleted()
         {
             InworldAI.Log("Init Success!");
-            m_Header = new Metadata
-            {
-                {"authorization", $"Bearer {m_InworldAuth.Token}"},
-                {"session-id", m_InworldAuth.SessionID}
-            };
+            core.OnAuthComplete();
             RuntimeEvent?.Invoke(RuntimeStatus.InitSuccess, "");
         }
 
-        void OnAuthFailed(string msg)
+        public void OnAuthFailed(string msg)
         {
+            core.OnAuthFailed(msg);
             RuntimeEvent?.Invoke(RuntimeStatus.InitFailed, msg);
         }
         #endregion
 
+        public void InvokeRuntimeEvent(RuntimeStatus status, string msg)
+        {
+            RuntimeEvent?.Invoke(status, msg);
+        }
+
         #region Private Functions
-        void _ReceiveCustomToken(string sessionToken)
-        {
-            JObject data = JObject.Parse(sessionToken);
-            if (data.ContainsKey("sessionId") && data.ContainsKey("token"))
-            {
-                InworldAI.Log("Init Success with Custom Token!");
-                m_Header = new Metadata
-                {
-                    {"authorization", $"Bearer {data["token"]}"},
-                    {"session-id", data["sessionId"]?.ToString()}
-                };
-                RuntimeEvent?.Invoke(RuntimeStatus.InitSuccess, "");
-            }
-            else
-                RuntimeEvent?.Invoke(RuntimeStatus.InitFailed, "Token Invalid");
-        }
-        internal void GetAppAuth(string sessionToken)
-        {
-#if UNITY_EDITOR && VSP
-            if (!string.IsNullOrEmpty(InworldAI.User.Account))
-                VSAttribution.VSAttribution.SendAttributionEvent("Login Runtime", InworldAI.k_CompanyName, InworldAI.User.Account);
-#endif
-            m_InworldAuth = new InworldAuth(OnAuthCompleted, OnAuthFailed);
-            if (string.IsNullOrEmpty(sessionToken))
-                m_InworldAuth.GenerateAccessToken(InworldAI.Game.StudioServer, InworldAI.Game.APIKey, InworldAI.Game.APISecret);
-            else
-            {
-                _ReceiveCustomToken(sessionToken);
-            }
-        }
+       
+        
         internal async Task<LoadSceneResponse> LoadScene(string sceneName)
         {
-
-            LoadSceneRequest lsRequest = new LoadSceneRequest
-            {
-                Name = sceneName,
-                Capabilities = InworldAI.Settings.Capabilities,
-                User = InworldAI.User.Request,
-                Client = InworldAI.User.Client
-            };
-            if (!string.IsNullOrEmpty(LastState))
-            {
-                lsRequest.SessionContinuation = new SessionContinuation
-                {
-                    PreviousState = ByteString.FromBase64(LastState)
-                };
-            }
-            try
-            {
-                LoadSceneResponse response = await m_WorldEngineClient.LoadSceneAsync(lsRequest, m_Header);
-                // Yan: They somehow use {WorkSpace}:{sessionKey} as "sessionKey" now. Need to remove the first part.
-                m_SessionKey = response.Key.Split(':')[1];
-                if (response.PreviousState != null)
-                {
-                    foreach (PreviousState.Types.StateHolder stateHolder in response.PreviousState.StateHolders)
-                    {
-                        InworldAI.Log($"Received Previous Packets: {stateHolder.Packets.Count}");
-                    }
-                }
-                m_Header.Add("Authorization", $"Bearer {m_SessionKey}");
-                RuntimeEvent?.Invoke(RuntimeStatus.LoadSceneComplete, m_SessionKey);
-                return response;
-            }
-            catch (RpcException e)
-            {
-                RuntimeEvent?.Invoke(RuntimeStatus.LoadSceneFailed, e.ToString());
-                return null;
-            }
+            var task = core.LoadScene(sceneName);
+            await task;
+            return task.Result;
         }
+
         // Marks audio session start.
         internal void StartAudio(Routing routing)
         {
-            InworldAI.Log("Start Audio Event");
-            if (SessionStarted)
-                m_CurrentConnection?.outgoingEventsQueue.Enqueue
-                (
-                    new GrpcPacket
-                    {
-                        Timestamp = Now,
-                        Routing = routing.ToGrpc(),
-                        Control = new ControlEvent
-                        {
-                            Action = ControlEvent.Types.Action.AudioSessionStart
-                        }
-                    }
-                );
+            core.StartAudio(routing);
         }
 
         // Marks session end.
         internal void EndAudio(Routing routing)
         {
-            if (SessionStarted)
-                m_CurrentConnection?.outgoingEventsQueue.Enqueue
-                (
-                    new GrpcPacket
-                    {
-                        Timestamp = Now,
-                        Routing = routing.ToGrpc(),
-                        Control = new ControlEvent
-                        {
-                            Action = ControlEvent.Types.Action.AudioSessionEnd
-                        }
-                    }
-                );
+            core.EndAudio(routing);
         }
 
         // Sends audio chunk to server.
         internal void SendAudio(AudioChunk audioEvent)
         {
-            if (SessionStarted)
-                m_CurrentConnection?.outgoingEventsQueue.Enqueue(audioEvent.ToGrpc());
+            core.SendAudio(audioEvent);
         }
         internal bool GetAudioChunk(out AudioChunk chunk)
         {
@@ -228,8 +141,7 @@ namespace Inworld
         }
         internal void SendEvent(InworldPacket e)
         {
-            if (SessionStarted)
-                m_CurrentConnection?.outgoingEventsQueue.Enqueue(e.ToGrpc());
+            core.SendEvent(e);
         }
         internal bool GetIncomingEvent(out InworldPacket incomingEvent)
         {
@@ -242,154 +154,69 @@ namespace Inworld
         }
         internal async Task StartSession()
         {
-            if (!IsSessionInitialized)
-            {
-                throw new ArgumentException("No sessionKey to start Inworld session, use CreateWorld first.");
-            }
-            // New queue for new session.
-            Connection connection = new Connection();
-            m_CurrentConnection = connection;
-
-            SessionStarted = true;
-            try
-            {
-                using (m_StreamingCall = m_WorldEngineClient.Session(m_Header))
-                {
-                    // https://grpc.github.io/grpc/csharp/api/Grpc.Core.IAsyncStreamReader-1.html
-                    Task inputTask = Task.Run
-                    (
-                        async () =>
-                        {
-                            while (SessionStarted)
-                            {
-                                bool next;
-                                try
-                                {
-                                    // Waiting response for some time before checking if done.
-                                    next = await m_StreamingCall.ResponseStream.MoveNext();
-                                }
-                                catch (RpcException rpcException)
-                                {
-                                    if (rpcException.StatusCode == StatusCode.Cancelled)
-                                    {
-                                        next = false;
-                                    }
-                                    else
-                                    {
-                                        // rethrowing other errors.
-                                        throw;
-                                    }
-                                }
-                                if (next)
-                                {
-                                    _ResolveGRPCPackets(m_StreamingCall.ResponseStream.Current);
-                                }
-                                else
-                                {
-                                    InworldAI.Log("Session is closed.");
-                                    break;
-                                }
-                            }
-                        }
-                    );
-                    Task outputTask = Task.Run
-                    (
-                        async () =>
-                        {
-                            while (SessionStarted)
-                            {
-                                Task.Delay(100).Wait();
-                                // Sending all outgoing events.
-                                GrpcPacket e;
-                                while (connection.outgoingEventsQueue.TryDequeue(out e))
-                                {
-                                    if (SessionStarted)
-                                    {
-                                        await m_StreamingCall.RequestStream.WriteAsync(e);
-                                    }
-                                }
-                            }
-                        }
-                    );
-                    await Task.WhenAll(inputTask, outputTask);
-                }
-            }
-            catch (Exception e)
-            {
-                SessionStarted = false;
-                Errors.Enqueue(e);
-            }
-            finally
-            {
-                SessionStarted = false;
-            }
+            var task = core.StartSession();
+            await task;
         }
         internal TextEvent ResolvePreviousPackets(GrpcPacket response) => response.Text != null ? new TextEvent(response) : null;
 
-        void _ResolveGRPCPackets(GrpcPacket response)
+        void _ResolveGRPCPackets(GrpcPacket packet)
         {
             m_CurrentConnection ??= new Connection();
-            if (response.DataChunk != null)
+            if (packet.DataChunk != null)
             {
-                switch (response.DataChunk.Type)
+                switch (packet.DataChunk.Type)
                 {
                     case DataChunk.Types.DataType.Audio:
-                        m_CurrentConnection.incomingAudioQueue.Enqueue(new AudioChunk(response));
+                        m_CurrentConnection.incomingAudioQueue.Enqueue(new AudioChunk(packet));
                         break;
                     case DataChunk.Types.DataType.Animation:
-                        m_CurrentConnection.incomingAnimationQueue.Enqueue(new AnimationChunk(response));
+                        m_CurrentConnection.incomingAnimationQueue.Enqueue(new AnimationChunk(packet));
                         break;
                     case DataChunk.Types.DataType.State:
-                        StateChunk stateChunk = new StateChunk(response);
+                        StateChunk stateChunk = new StateChunk(packet);
                         LastState = stateChunk.Chunk.ToBase64();
                         break;
                     default:
-                        InworldAI.LogError($"Unsupported incoming event: {response}");
+                        InworldAI.LogError($"Unsupported incoming event: {packet}");
                         break;
                 }
             }
-            else if (response.Text != null)
+            else if (packet.Text != null)
             {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new TextEvent(response));
+                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new TextEvent(packet));
             }
-            else if (response.Gesture != null)
+            else if (packet.Gesture != null)
             {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new GestureEvent(response));
+                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new GestureEvent(packet));
             }
-            else if (response.Control != null)
+            else if (packet.Control != null)
             {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new Packets.ControlEvent(response));
+                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new Packets.ControlEvent(packet));
             }
-            else if (response.Emotion != null)
+            else if (packet.Emotion != null)
             {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new EmotionEvent(response));
+                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new EmotionEvent(packet));
             }
-            else if (response.Custom != null)
+            else if (packet.Custom != null)
             {
-                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new CustomEvent(response));
+                m_CurrentConnection.incomingInteractionsQueue.Enqueue(new CustomEvent(packet));
             }
             else
             {
-                InworldAI.LogError($"Unsupported incoming event: {response}");
+                InworldAI.LogError($"Unsupported incoming event: {packet}");
             }
         }
 
         internal async Task EndSession()
         {
-            if (SessionStarted)
-            {
-                m_CurrentConnection = null;
-                SessionStarted = false;
-                await m_StreamingCall.RequestStream.CompleteAsync();
-                m_StreamingCall.Dispose();
-            }
+            var task = core.EndSession();
+            await task;
         }
         internal void Destroy()
         {
 #pragma warning disable CS4014
             EndSession();
-#pragma warning restore CS4014
-            m_Channel.ShutdownAsync();
+            core.Destroy();
         }
         #endregion
     }
