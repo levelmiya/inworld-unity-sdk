@@ -20,10 +20,10 @@ public interface IInworldClient
     void Authenticate(string sessionToken);
     void OnAuthComplete();
     void OnAuthFailed(string message);
+    void Update();
 
     bool IsAuthenticated { get; }
     string SessionID { get; }
-    string LastState { get; set; }
     bool IsSessionInitialized { get; }
     
     Task<LoadSceneResponse> LoadScene(string sceneName);
@@ -44,9 +44,9 @@ public interface IInworldClient
     //void ResolvePackets(InworldPacket packet);
 }
 
-public interface IInworldClient<T> : IInworldClient
-{
-    //parameter may nee,d to be changed to account for websockets
-    void ResolvePackets(T packet);
-}
+//public interface IInworldClient<T> : IInworldClient
+//{
+//    //parameter may nee,d to be changed to account for websockets
+//    void ResolvePackets(T packet);
+//}
 

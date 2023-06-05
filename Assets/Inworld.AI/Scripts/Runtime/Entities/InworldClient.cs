@@ -51,7 +51,8 @@ namespace Inworld
         internal IInworldClient core;
         internal InworldClient()
         {
-            core = new GRPCClient();
+            bool useDefault = false;
+            core = useDefault? new GRPCClient() : new InworldNDKClient();
             core.Initialize(this);            
         }
 
@@ -60,7 +61,7 @@ namespace Inworld
         internal bool SessionStarted { get; set; }
         internal bool HasInit => core.IsAuthenticated;
         internal string SessionID => core.SessionID;
-        internal string LastState { get => core.LastState; set => core.LastState = value; }
+        internal string LastState { get; set; }
         bool IsSessionInitialized => core.IsSessionInitialized;
         public Timestamp Now => Timestamp.FromDateTime(DateTime.UtcNow);
         #endregion
@@ -155,7 +156,12 @@ namespace Inworld
         }
         internal TextEvent ResolvePreviousPackets(GrpcPacket response) => response.Text != null ? new TextEvent(response) : null;
 
-        void _ResolveGRPCPackets(GrpcPacket packet)
+        public void Update()
+        {
+            core.Update();
+        }
+
+        public void ResolvePackets(GrpcPacket packet)
         {
             m_CurrentConnection ??= new Connection();
             if (packet.DataChunk != null)

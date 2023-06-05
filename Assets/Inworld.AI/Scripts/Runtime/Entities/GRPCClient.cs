@@ -31,7 +31,7 @@ using UnityEditor.PackageManager;
 using UnityEditor.Sprites;
 using Inworld.Studio;
 
-public class GRPCClient : IInworldClient<GrpcPacket>
+public class GRPCClient : IInworldClient
 {
     InworldClient m_Client;
     #region Private Variables
@@ -50,8 +50,6 @@ public class GRPCClient : IInworldClient<GrpcPacket>
     public bool IsAuthenticated => !m_InworldAuth.IsExpired;
 
     public string SessionID => m_InworldAuth?.SessionID ?? "";//throw new NotImplementedException();
-
-    public string LastState { get; set; }
 
     public bool IsSessionInitialized => m_SessionKey.Length != 0;
 
@@ -239,7 +237,7 @@ public class GRPCClient : IInworldClient<GrpcPacket>
                             }
                             if (next)
                             {
-                                ResolvePackets(m_StreamingCall.ResponseStream.Current);
+                                m_Client.ResolvePackets(m_StreamingCall.ResponseStream.Current);
                             }
                             else
                             {
@@ -305,12 +303,11 @@ public class GRPCClient : IInworldClient<GrpcPacket>
             Client = InworldAI.User.Client
         };
 
-        Debug.Log("last state is " + LastState);
-        if (!string.IsNullOrEmpty(LastState))
+        if (!string.IsNullOrEmpty(m_Client.LastState))
         {
             lsRequest.SessionContinuation = new SessionContinuation
             {
-                PreviousState = ByteString.FromBase64(LastState)
+                PreviousState = ByteString.FromBase64(m_Client.LastState)
             };
         }
         try
@@ -340,5 +337,9 @@ public class GRPCClient : IInworldClient<GrpcPacket>
     {
 #pragma warning restore CS4014
         m_Channel.ShutdownAsync();
+    }
+
+    public void Update()
+    {
     }
 }
