@@ -34,7 +34,7 @@ namespace Inworld
         public InworldServerConfig Server
         {
             get => m_ServerConfig;
-            internal set => m_ServerConfig = value;
+            set => m_ServerConfig = value;
         }
         public Token Token
         {
@@ -105,18 +105,18 @@ namespace Inworld
         }
         public void Dispatch(InworldPacket packet) => OnPacketReceived?.Invoke(packet);
 
-        internal string APIKey
+        public string APIKey
         {
             get => m_APIKey;
             set => m_APIKey = value;
         }
-        internal string APISecret
+        public string APISecret
         {
             get => m_APISecret;
             set => m_APISecret = value;
         }
 
-        internal string CustomToken
+        public string CustomToken
         {
             get => m_CustomToken;
             set => m_CustomToken = value;

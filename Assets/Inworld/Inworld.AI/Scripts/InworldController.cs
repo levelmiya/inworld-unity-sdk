@@ -31,7 +31,7 @@ namespace Inworld
         {
             get => Instance ? Instance.m_Client : null;
             #if  UNITY_EDITOR
-            internal set
+            set
             {
                 if (!Instance)
                     return;
