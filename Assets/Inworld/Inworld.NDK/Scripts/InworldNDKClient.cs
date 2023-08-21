@@ -70,6 +70,7 @@ namespace Inworld.NDK
 
         void PacketCallback(IntPtr packetWrapper, int packetSize)
         {
+            SimpleInworldPacket packet = (SimpleInworldPacket)Marshal.PtrToStructure(packetWrapper, typeof(SimpleInworldPacket));
             // Create a byte array to store the data
             byte[] data = new byte[packetSize];
             // Copy the data from the IntPtr to the byte array
