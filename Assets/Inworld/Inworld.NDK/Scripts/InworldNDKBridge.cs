@@ -17,7 +17,7 @@ namespace Inworld.NDK
     public delegate void ConnectionStateCallbackType(ConnectionState state);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate void PacketCallbackType(IntPtr packetWrapper, int size);
+    public delegate void PacketCallbackType(IntPtr packetJson, int size, PacketType type);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void LoadSceneCallbackType(IntPtr serializedAgentInfoArray, int serializedAgentInfoArraySize);
@@ -66,8 +66,8 @@ namespace Inworld.NDK
         [DllImport("InworldNDK", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ClientWrapper_SendSoundMessage")]
         public static extern void ClientWrapper_SendSoundMessage(IntPtr wrapper, string agentId, byte[] data, int dataSize);
 
-        [DllImport("InworldNDK", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ClientWrapper_SendSoundMessageWithAEC")]
-        public static extern void ClientWrapper_SendSoundMessageWithAEC(IntPtr wrapper, string agentId, IntPtr inputData, int inputDataSize, IntPtr outputData, int outputDataSize);
+        [DllImport("InworldNDK", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ClientWrapper_SendStringSoundMessage")]
+        public static extern void ClientWrapper_SendStringSoundMessage(IntPtr wrapper, string agentId, string data);
 
         [DllImport("InworldNDK", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ClientWrapper_SendCustomEvent")]
         public static extern void ClientWrapper_SendCustomEvent(IntPtr wrapper, string agentId, string name);

@@ -1,16 +1,40 @@
 using Google.Protobuf;
 using Inworld.Packet;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Inworld.NDK
 {
+    public class DurationToDoubleConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType == typeof(float);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            var durationString = (string)reader.Value;
+            // Parse the duration string "0s" to a double (here just taking the 0 as an example, you might have to handle more cases)
+            float value = float.Parse(durationString.TrimEnd('s'));
+            return value;
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            // Convert the double back to a duration string if needed
+            writer.WriteValue($"{value}s");
+        }
+    }
+    
     public class InworldNDKClient : InworldClient
     {
         InworldNDKBridge m_Wrapper;
@@ -68,22 +92,71 @@ namespace Inworld.NDK
                     break;
             }
         }
-
-        void PacketCallback(IntPtr packetWrapper, int packetSize)
+        
+        void PacketCallback(IntPtr data, int size, PacketType type)
         {
-            SimpleInworldPacket packet = (SimpleInworldPacket)Marshal.PtrToStructure(packetWrapper, typeof(SimpleInworldPacket));
-            // Create a byte array to store the data
-            byte[] data = new byte[packetSize];
-            // Copy the data from the IntPtr to the byte array
-            Marshal.Copy(packetWrapper, data, 0, packetSize);
+            Debug.Log("PacketCallback of type " + type + " size is " + size);
+            byte[] managedArray = new byte[size];
+            Marshal.Copy(data, managedArray, 0, size);
 
-            // Deserialize the byte array to an InworldPacket instance using protobuf
-            InworldPacket response = InworldPacket.Parser.ParseFrom(data);
-            if (response != null)
-                ResolvePackets(response);
+            // If it's a string, convert it:
+            string packetJson = Encoding.UTF8.GetString(managedArray);
+            packetJson = packetJson.TrimEnd('@');
             
-            Marshal.FreeCoTaskMem(packetWrapper);
+            Debug.Log("PACKET LAST CHARACTER IS " + packetJson[packetJson.Length - 1]);
+            if (type == PacketType.None)
+            {            
+                InworldPacket packet = DeserializeInworldPacket(packetJson);
+                Dispatch(packet);
+            }
+            else if (type == PacketType.Text)
+            {
+                TextPacket packet = DeserializeTextPacket(packetJson);
+                Dispatch(packet);
+                Debug.Log("received and should have dipsatched text event with text " + packet.text.text + " utterance id " + packet.packetId.utteranceId);
+            }
+            else if (type == PacketType.DataChunk)
+            {
+                Debug.Log("packetJson data chunk length is " + packetJson.Length  + " contents are "+ packetJson);
+                var settings = new JsonSerializerSettings();
+                settings.Converters.Add(new DurationToDoubleConverter());
+                AudioPacket dataPacket = JsonConvert.DeserializeObject<AudioPacket>(packetJson, settings);
+                switch (dataPacket.type)
+                {
+                    case "AUDIO":
+                        Dispatch(dataPacket);
+                        break;
+                }
+            }
+            //ResolvePackets(packet);
         }
+        
+        public InworldPacket DeserializeInworldPacket(string json)
+        {
+            return JsonConvert.DeserializeObject<InworldPacket>(json);
+        }
+
+        public TextPacket DeserializeTextPacket(string json)
+        {
+            return JsonConvert.DeserializeObject<TextPacket>(json);
+        }
+
+
+        // void PacketCallback(IntPtr packetWrapper, int packetSize)
+        // {
+        //     SimpleInworldPacket packet = (SimpleInworldPacket)Marshal.PtrToStructure(packetWrapper, typeof(SimpleInworldPacket));
+        //     // Create a byte array to store the data
+        //     byte[] data = new byte[packetSize];
+        //     // Copy the data from the IntPtr to the byte array
+        //     Marshal.Copy(packetWrapper, data, 0, packetSize);
+        //
+        //     // Deserialize the byte array to an InworldPacket instance using protobuf
+        //     InworldPacket response = InworldPacket.Parser.ParseFrom(data);
+        //     if (response != null)
+        //         ResolvePackets(response);
+        //     
+        //     Marshal.FreeCoTaskMem(packetWrapper);
+        // }
         
         void TokenCallback(string token)
         {
@@ -153,17 +226,17 @@ namespace Inworld.NDK
 #pragma warning restore CS4014
         void SendRawEvent(InworldPacket packet)
         {
-            byte[] packetBytes = packet.ToByteArray();
-            IntPtr packetPtr = Marshal.AllocHGlobal(packetBytes.Length);
-            try
-            {
-                Marshal.Copy(packetBytes, 0, packetPtr, packetBytes.Length);
-                InworldNDKBridge.ClientWrapper_SendPacket(m_Wrapper.instance, packetPtr);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(packetPtr); // Make sure to free the allocated memory
-            }
+            // byte[] packetBytes = packet.ToByteArray();
+            // IntPtr packetPtr = Marshal.AllocHGlobal(packetBytes.Length);
+            // try
+            // {
+            //     Marshal.Copy(packetBytes, 0, packetPtr, packetBytes.Length);
+            //     InworldNDKBridge.ClientWrapper_SendPacket(m_Wrapper.instance, packetPtr);
+            // }
+            // finally
+            // {
+            //     Marshal.FreeHGlobal(packetPtr); // Make sure to free the allocated memory
+            // }
         }
         public override void SendText(string characterID, string textToSend)
         {
@@ -179,7 +252,8 @@ namespace Inworld.NDK
                 text = new Packet.TextEvent(textToSend)
             };
             Dispatch(packet);
-            _SendPacket(InworldPacketConverter.To.TextEvent(characterID, textToSend));
+            InworldNDKBridge.ClientWrapper_SendTextMessage(m_Wrapper.instance, characterID, textToSend);
+            //_SendPacket(InworldPacketConverter.To.TextEvent(characterID, textToSend));
         }
 
         public override void SendCancelEvent(string characterID, string interactionID)
@@ -220,9 +294,9 @@ namespace Inworld.NDK
             if (string.IsNullOrEmpty(charID) || string.IsNullOrEmpty(base64))
                 return;
             
-            InworldPacket audioChunk = InworldPacketConverter.To.AudioChunk(charID, base64);
-            byte[] data = audioChunk.DataChunk.Chunk.ToByteArray();
-            InworldNDKBridge.ClientWrapper_SendSoundMessage(m_Wrapper.instance, charID, data, data.Length);
+            AudioPacket audioChunk = InworldPacketConverter.To.AudioChunk(charID, base64);
+            //byte[] data = audioChunk.dataChunk.chunk;
+            InworldNDKBridge.ClientWrapper_SendStringSoundMessage(m_Wrapper.instance, charID, audioChunk.dataChunk.chunk);
         }
 
         void _StartSession()
@@ -317,51 +391,51 @@ namespace Inworld.NDK
             if (Status == InworldConnectionStatus.Connected)
                 m_OutgoingEventsQueue.Enqueue(packet);
         }
-        void ResolvePackets(InworldPacket response)
-        {
-            if (response.DataChunk != null)
-            {
-                switch (response.DataChunk.Type)
-                {
-                    case DataChunk.Types.DataType.Audio:
-                        Dispatch(InworldPacketConverter.From.NDKAudioChunk(response));
-                        break;
-                    case DataChunk.Types.DataType.State:
-                    case DataChunk.Types.DataType.Silence:
-                        // TODO(YAN): Support State and Silence.
-                        break;
-                    default:
-                        InworldAI.LogError($"Unsupported incoming event: {response}");
-                        Dispatch(InworldPacketConverter.From.NDKPacket(response));
-                        break;
-                }
-            }
-            else if (response.Text != null)
-            {
-                Dispatch(InworldPacketConverter.From.NDKTextPacket(response));
-            }
-            else if (response.Control != null)
-            {
-                Dispatch(InworldPacketConverter.From.NDKControlPacket(response));
-            }
-            else if (response.Emotion != null)
-            {
-                Dispatch(InworldPacketConverter.From.NDKEmotionPacket(response));
-            }
-            else if (response.Action != null)
-            {
-                Dispatch(InworldPacketConverter.From.NDKActionPacket(response));
-            }
-            else if (response.Custom != null)
-            {
-                Dispatch(InworldPacketConverter.From.NDKCustomPacket(response));
-            }
-            else
-            {
-                Debug.LogError($"YAN UnSupported {response}");
-                Dispatch(InworldPacketConverter.From.NDKPacket(response));
-            }
-        }
+        // void ResolvePackets(InworldPacket response)
+        // {
+        //     if (response.DataChunk != null)
+        //     {
+        //         switch (response.DataChunk.Type)
+        //         {
+        //             case DataChunk.Types.DataType.Audio:
+        //                 Dispatch(InworldPacketConverter.From.NDKAudioChunk(response));
+        //                 break;
+        //             case DataChunk.Types.DataType.State:
+        //             case DataChunk.Types.DataType.Silence:
+        //                 // TODO(YAN): Support State and Silence.
+        //                 break;
+        //             default:
+        //                 InworldAI.LogError($"Unsupported incoming event: {response}");
+        //                 Dispatch(InworldPacketConverter.From.NDKPacket(response));
+        //                 break;
+        //         }
+        //     }
+        //     else if (response.Text != null)
+        //     {
+        //         Dispatch(InworldPacketConverter.From.NDKTextPacket(response));
+        //     }
+        //     else if (response.Control != null)
+        //     {
+        //         Dispatch(InworldPacketConverter.From.NDKControlPacket(response));
+        //     }
+        //     else if (response.Emotion != null)
+        //     {
+        //         Dispatch(InworldPacketConverter.From.NDKEmotionPacket(response));
+        //     }
+        //     else if (response.Action != null)
+        //     {
+        //         Dispatch(InworldPacketConverter.From.NDKActionPacket(response));
+        //     }
+        //     else if (response.Custom != null)
+        //     {
+        //         Dispatch(InworldPacketConverter.From.NDKCustomPacket(response));
+        //     }
+        //     else
+        //     {
+        //         Debug.LogError($"YAN UnSupported {response}");
+        //         Dispatch(InworldPacketConverter.From.NDKPacket(response));
+        //     }
+        // }
         bool _ReceiveCustomToken()
         {
             string[] parts = m_CustomToken.Split('|');

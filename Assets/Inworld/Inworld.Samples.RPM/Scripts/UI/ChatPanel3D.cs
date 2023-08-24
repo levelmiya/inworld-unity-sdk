@@ -30,9 +30,11 @@ namespace Inworld.Sample.RPM
     }
     protected void OnInteraction(InworldPacket incomingPacket)
     {
+        Debug.Log("receiving a packet of type " + incomingPacket.GetType().Name + " from " + incomingPacket.routing.source.name + " to " + incomingPacket.routing.target.name );
         switch (incomingPacket)
         {
             case TextPacket textPacket:
+                Debug.Log("SHOULD BE RECEIVING TEXT");
                 HandleText(textPacket);
                 break;
             case EmotionPacket emotionPacket:

@@ -5,6 +5,21 @@ using System.Runtime.InteropServices;
 
 namespace Inworld.NDK
 {
+    public enum PacketType {
+        None = 0, // Useful for indicating that no field is set
+        Text = 2,
+        Control = 3,
+        AudioChunk = 4, // Note: This is deprecated in your proto definition
+        Custom = 8,
+        CancelResponses = 10, // Note: This is deprecated in your proto definition
+        Emotion = 11,
+        DataChunk = 12,
+        Action = 13,
+        Mutation = 15,
+        LoadSceneOutput = 16,
+        DebugInfo = 18
+    }
+    
     [StructLayout(LayoutKind.Sequential)]
     public struct SimpleActor {
         public int type;

@@ -108,16 +108,24 @@ namespace Inworld.Interactions
             {
                 if (!IsRelated(incomingPacket))
                 {
+                    Debug.Log("Not related returning packet early");
                     return;
+                }
+                else 
+                {
+                    Debug.Log("Related packet");
                 }
 
                 switch (incomingPacket?.routing?.source?.type.ToUpper())
                 {
                     case "AGENT":
+                        Debug.Log("AGENT PACKET");
                         Add(incomingPacket);
                         break;
                     case "PLAYER":
                         // Send Directly.
+                        Debug.Log("PLAYER PACKET");
+
                         OnInteractionChanged?.Invoke
                         (
                             new List<InworldPacket>
@@ -136,7 +144,11 @@ namespace Inworld.Interactions
         void Add(InworldPacket packet)
         {
             if (packet.packetId == null || string.IsNullOrEmpty(packet.packetId.interactionId))
+            {
+                Debug.Log("Packet ID is null or empty RETURNING EARLY");
                 return;
+            }
+
             Interaction interaction = this[packet.packetId.interactionId] ?? new Interaction(packet.packetId.interactionId);
             Utterance utterance = interaction[packet.packetId.utteranceId] ?? new Utterance(packet.packetId.utteranceId);
             interaction.Status = PacketStatus.RECEIVED; // Refresh Interaction Status.
@@ -152,9 +164,14 @@ namespace Inworld.Interactions
 
             if (CurrentUtterance != null && packet.packetId.utteranceId == CurrentUtterance.UtteranceID || packet is CustomPacket)
             {
+                Debug.Log("SHOULD INVOKE INTERACTION CHANGE");
                 // YAN: Send Overdue packets and trigger
                 OnInteractionChanged?.Invoke(utterance.Packets);
-            } 
+            }
+            else
+            {
+                Debug.Log("did NOT INVOKE INTERACTION CHANGE");
+            }
         }
         public virtual void CancelResponse()
         {
